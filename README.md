@@ -6,7 +6,8 @@
 
 Install Nginx:
 ```
-sudo amazon-linux-extras install nginx1
+sudo yum update -y
+sudo yum install nginx -y
 ```
 
 Start Nginx and enable it to start on boot:
@@ -27,31 +28,6 @@ Basic configuration for HTTP:
 server {
     listen 80;
     server_name yourdomain.com;
-
-    location / {
-        proxy_pass http://localhost:3080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-Configuration for HTTPS (assuming you have SSL certificates):
-```nginx
-server {
-    listen 80;
-    server_name yourdomain.com;
-    return 301 https://$server_name$request_uri;
-}
-
-server {
-    listen 443 ssl;
-    server_name yourdomain.com;
-
-    ssl_certificate /path/to/certificate.pem;
-    ssl_certificate_key /path/to/certificate_key.pem;
 
     location / {
         proxy_pass http://localhost:3080;
@@ -92,13 +68,11 @@ Verify that conf.d is included in main config:
 sudo cat /etc/nginx/nginx.conf | grep include
 ```
 
-## 5. SSL Certificates
+## 5. SSL Certificates (Let's Encrypt)
 
-For Let's Encrypt certificates:
 1. Install Certbot:
    ```
-   sudo amazon-linux-extras install epel
-   sudo yum install certbot python2-certbot-nginx
+   sudo yum install certbot python3-certbot-nginx -y
    ```
 
 2. Obtain and install certificate:
@@ -106,11 +80,63 @@ For Let's Encrypt certificates:
    sudo certbot --nginx -d yourdomain.com
    ```
 
+3. If the above fails, try standalone mode:
+   ```
+   sudo systemctl stop nginx
+   sudo certbot certonly --standalone -d yourdomain.com
+   sudo systemctl start nginx
+   ```
+
+4. Configure Nginx for HTTPS:
+   ```
+   sudo nano /etc/nginx/conf.d/yourdomain.conf
+   ```
+
+   Use this configuration:
+   ```nginx
+   server {
+       listen 80;
+       server_name yourdomain.com;
+       return 301 https://$server_name$request_uri;
+   }
+
+   server {
+       listen 443 ssl http2;
+       server_name yourdomain.com;
+
+       ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+       ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+
+       ssl_protocols TLSv1.2 TLSv1.3;
+       ssl_prefer_server_ciphers on;
+       ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+
+       add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+       location / {
+           proxy_pass http://localhost:3080;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+
+5. Test and reload Nginx:
+   ```
+   sudo nginx -t
+   sudo systemctl reload nginx
+   ```
+
 ## 6. Security Considerations
 
-1. Configure firewall to allow HTTP (80) and HTTPS (443) traffic.
-2. Regularly update Nginx and your system.
-3. Use strong SSL settings (you can use Mozilla's SSL Configuration Generator).
+1. Configure EC2 security group to allow HTTP (80) and HTTPS (443) traffic.
+2. Regularly update Nginx and your system:
+   ```
+   sudo yum update -y
+   ```
+3. Use strong SSL settings (as provided in the HTTPS configuration above).
 
 ## 7. Common Issues and Solutions
 
@@ -125,5 +151,11 @@ For Let's Encrypt certificates:
 - Restart Nginx: `sudo systemctl restart nginx`
 - Reload Nginx configuration: `sudo systemctl reload nginx`
 - Check Nginx status: `sudo systemctl status nginx`
+- View Nginx configuration: `sudo nano /etc/nginx/nginx.conf`
+- List Nginx config files: `ls /etc/nginx/conf.d/`
+- Check Certbot renewal: `sudo certbot renew --dry-run`
+- Force certificate renewal: `sudo certbot renew --force-renewal`
 
-Remember to replace `yourdomain.com` with your actual domain name and adjust paths and port numbers as necessary for your specific setup
+Remember to replace `yourdomain.com` with your actual domain name and adjust paths and port numbers as necessary for your specific setup.
+
+This updated README now includes the complete process for installing and configuring SSL certificates, as well as additional useful commands for managing Nginx and Certbot.
